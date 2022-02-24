@@ -146,17 +146,31 @@ Do each of the quantitative variables seem drawn from a normal distribution? If 
 ```{r}
 library(mosaic)
 # quantitative variables = height, weight, zombies_killed, years_of_education
-# STILL NEED TO MAKE QQ PLOTS
 histogram(z$height)
 plotDist("norm",mean = mean(z$height),sd = sd(z$height),add=TRUE) # yes height seems normally distributed
+qqnorm(z$height, main = "QQ Plot - Height")
+qqline(z$height, col = "gray")
 histogram(z$weight)
 plotDist("norm",mean = mean(z$weight),sd = sd(z$weight),add=TRUE) # yes weight seems normally distributed
+qqnorm(z$weight, main = "QQ Plot - Weight")
+qqline(z$weight, col = "gray")
 histogram(z$zombies_killed)
-plotDist("norm",mean = mean(z$zombies_killed),sd = sd(z$zombies_killed),add=TRUE) # zombies killed seems normally distributed
+plotDist("norm",mean = mean(z$zombies_killed),sd = sd(z$zombies_killed),add=TRUE) 
+qqnorm(z$zombies_killed, main = "QQ Plot - Zombies killed")
+qqline(z$zombies_killed, col = "gray") # not looking normal
+# let's try a poisson distribution
+histogram(z$zombies_killed)
+plotDist("pois",lambda=mean(z$zombies_killed),add=TRUE)
+# years of education
 histogram(z$years_of_education)
 plotDist("norm",mean = mean(z$years_of_education),sd = sd(z$years_of_education),add=TRUE) # years in ed does not seem normally distributed
-# perhaps a poisson distribution (this is discrete var) or binomial?
+qqnorm(z$years_of_education, main = "QQ Plot - Years of education")
+qqline(z$years_of_education, col = "gray") # not looking normal
+# Let's try it with a poisson distribution
+histogram(z$years_of_education)
+plotDist("pois",lambda=mean(z$years_of_education),add=TRUE)
 ```
+Height and weight seem normally distributed (as expected). Zombies killed and years of education both are discrete variables that do not seem normally distributed. They both look like they could follow a poisson distribution. I tried overlaying a poisson distribution on top of these plots to illustrate that.
 
 Sample subset of zombie survivors (once, 50 individuals, no replacement) and calculate mean and sd for each var. Then estimate the standard error and construct the theoretical 95% confidence interval for each mean. Use standard normal or student's t distribution to derive critical values needed to calculate lower and upper CI.
 ```{r}
@@ -176,6 +190,11 @@ stderror_sample_z <- sample_z %>% summarize(SE_height = sd_height/(sqrt(50)),
                                             SE_zombies_killed = sd_zombies_killed/(sqrt(50)),
                                             SE_years_ed = sd_yearsed/(sqrt(50)))
 # construct 95% confidence interval for each mean
+CIs_singlesample <- sample_z %>% 
+  summarize(CI_height = mean(mean_height) + c(qnorm(0.025),qnorm(0.975)) * sd_height/sqrt(50),
+            CI_weight = mean(mean_weight) + c(qnorm(0.025),qnorm(0.975)) * sd_weight/sqrt(50),
+            CI_zombies_killed = mean(mean_zombies_killed) + c(qnorm(0.025),qnorm(0.975)) * sd_zombies_killed/sqrt(50),
+            CI_years_ed = mean(mean_yearsed) + c(qnorm(0.025),qnorm(0.975)) * sd_yearsed/sqrt(50))
 
 # draw 199 random samples of 50 survivors and calculate mean for each of these samples
 library(infer)
@@ -194,15 +213,51 @@ z_sampled200 <- bind_rows(multi_sample_z,mean_single_sample)
 
 # means and standard deviations of the sampling distributions for each variable
 (sampling_distr_means_sds <- z_sampled200 %>% summarize(sampdistr_mean_height = mean(mean_height),
-                                                       samp_distr_sd_height = sd(mean_height),
+                                                       sampdistr_sd_height = sd(mean_height),
                                                        sampdistr_mean_weight = mean(mean_weight),
                                                        sampdistr_sd_weight = sd(mean_weight),
                                                        sampdistr_mean_zombies = mean(mean_zombies_killed),
                                                        sampdistr_sd_zombies = sd(mean_zombies_killed),
-                                                       sampdistr_yearsed = mean(mean_yearsed),
-                                                       sampdistr_yearsed = sd(mean_yearsed)))
+                                                       sampdistr_mean_yearsed = mean(mean_yearsed),
+                                                       sampdistr_sd_yearsed = sd(mean_yearsed)))
 
 # generating confidence interval for each mean directly from the sampling distribution using the central 95% of that distribution - lower bound - 2.5, upper bound - 97.5
+CIs_samp_distr <- sampling_distr_means_sds %>% 
+  summarize(CI_sampdistr_height = sampdistr_mean_height + c(quantile(z_sampled200$mean_height,0.025),quantile(z_sampled200$mean_height,0.975)) * sampdistr_sd_height/sqrt(200),
+            CI_sampdistr_weight = sampdistr_mean_weight + c(quantile(z_sampled200$mean_weight,0.025),quantile(z_sampled200$mean_weight,0.975)) * sampdistr_sd_weight/sqrt(200),
+            CI_sampdistr_zombies = sampdistr_mean_zombies + c(quantile(z_sampled200$mean_zombies_killed,0.025),quantile(z_sampled200$mean_zombies_killed,0.975)) * sampdistr_sd_zombies/sqrt(200),
+            CI_sampdistr_yearsed = sampdistr_mean_yearsed + c(quantile(z_sampled200$mean_yearsed,0.025),quantile(z_sampled200$mean_yearsed,0.975)) * sampdistr_sd_yearsed/sqrt(200))
+
 ```
 
-How do the standard deviations of the sampling distribution for each variable compare to the standard errors estimated from your first sample of size 50? What do sampling distributions for each variable mean look like? Are they normally distributed? What about for those variables that you concluded were not originally drawn from a normal distribution? How do the two 95% CIs you estimated compare to one another (i.e., the CI based on one sample and the corresponding sample standard deviation versus the CI based on simulation where you created a sampling distribution across 200 samples)?
+How do the standard deviations of the sampling distribution for each variable compare to the standard errors estimated from your first sample of size 50?
+``` {r}
+# How do the sds of sampling distribution for each variable compare to the standard errors estimated from first sample of size 50?
+# sampling distribution sds
+(sampling_distr_means_sds %>% select(sampdistr_sd_height,sampdistr_sd_weight,sampdistr_sd_zombies,sampdistr_sd_yearsed))
+# SE of first sample of 50
+stderror_sample_z
+```
+They are very similar. The SE for the 50 samples is a little higher than the standard deviations based on the sampling distribution.
+
+What do sampling distributions for each variable mean look like? Are they normally distributed? What about for those variables that you concluded were not originally drawn from a normal distribution?
+```{r}
+histogram(z_sampled200$mean_height)
+plotDist("norm",mean = mean(z_sampled200$mean_height),sd = sd(z_sampled200$mean_height),add=TRUE)
+histogram(z_sampled200$mean_weight)
+plotDist("norm",mean = mean(z_sampled200$mean_weight),sd = sd(z_sampled200$mean_weight),add=TRUE)
+histogram(z_sampled200$mean_zombies_killed)
+plotDist("norm",mean = mean(z_sampled200$mean_zombies_killed),sd = sd(z_sampled200$mean_zombies_killed),add=TRUE)
+histogram(z_sampled200$mean_yearsed)
+plotDist("norm",mean = mean(z_sampled200$mean_yearsed),sd = sd(z_sampled200$mean_yearsed),add=TRUE)
+```
+Yes, all the distributions look pretty normal. This makes sense even though some of the underlying data do not have a normal distribution because of the central limit theorem. We are sampling from the data and calculating a statistic (mean) and if we do this with a large enough sample size enough times, we should get a normal curve. 
+
+How do the two 95% CIs you estimated compare to one another (i.e., the CI based on one sample and the corresponding sample standard deviation versus the CI based on simulation where you created a sampling distribution across 200 samples)?
+```{r}
+# CI based on one sample
+CIs_singlesample
+# CI based on sampling distribution across 200 samples
+CIs_samp_distr
+```
+The 95% confidence intervals are much smaller when calculated from the sampling distribution across 200 samples. This makes sense since we have a lot more samples and can have more confidence in the means that we are calculating from the sampling distribution.
