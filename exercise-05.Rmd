@@ -1,0 +1,208 @@
+---
+title: "exercise-05"
+author: "Sam Smith"
+date: "2/23/2022"
+output: html_document
+---
+Challenge 1
+```{r}
+library(tidyverse)
+library(dplyr)
+f <- "https://raw.githubusercontent.com/difiore/ada-2022-datasets/main/IMDB-movies.csv"
+d <- read_csv(f, col_names = TRUE)
+new_df <- d %>% filter(startYear %in% 1920:1979 & runtimeMinutes >=60 & runtimeMinutes <= 180) %>% mutate("decade" = case_when(startYear <= 1929 ~ "20s",
+                                startYear <=1939 ~ "30s",
+                                startYear <=1949 ~ "40s",
+                                startYear <=1959 ~ "50s",
+                                startYear <=1969 ~ "60s",
+                                startYear <=1979 ~ "70s"))
+
+# plot histogram with ggplot
+ggplot(new_df,aes(x=runtimeMinutes)) +
+  xlab("Runtime in Minutes") +
+  geom_histogram(na.rm=TRUE) +
+  facet_wrap(~decade,ncol=3)
+```
+
+Challenge 1 continued ...
+Use a 1 line statement to calculate the population mean and standard deviation in runtimeMinutes for each decade and save the results in a new dataframe, results
+NOTE TO SELF FIX THIS
+```{r}
+popSD <- function(x){sqrt(sum((x-mean(x))^2)/(length(x)))}
+results <- summarise(group_by(new_df,decade),
+                     n_cases = n(),
+                     popMean = mean(runtimeMinutes,na.rm=TRUE),
+                     popSD = popSD(runtimeMinutes))
+```
+
+Challenge 1 continued...
+standard error = sd / square root of sample size
+``` {r}
+# calculate mean and sd of single sample of 100 per decade
+single_sample <- new_df %>% group_by(decade) %>% sample_n(size=100,replace=FALSE) %>% 
+  summarize(sample_mean = mean(runtimeMinutes,na.rm=TRUE),
+            sample_sd = sd(runtimeMinutes,na.rm=TRUE))
+# calculate standard error for estimate of pop mean
+stderror_singlesample <- single_sample$sample_sd / sqrt(100)
+
+# actual pop mean and sd for dataset
+results
+stderror_population <- results$popSD / sqrt(results$n_cases)
+```
+
+Standard error for the single sample of 100 samples per decade is higher than in the population, but how much higher varies based on the actual number of entries for each decade. We have a larger difference between sample standard error and population standard error for decades with lots of movie entries.
+
+```{r}
+# generate sampling distribution of mean runtimemins for each decade by drawing
+# 1000 samples of 100 movies from each decade
+library(infer)
+reps <- 1000
+n <- 100
+decade <- c("20s","30s","40s","50s","60s","70s")
+samp_distr_bydec <- tibble("replicate"=numeric(),
+                           "mean"=numeric(),
+                           "sd"=numeric(),
+                           "decade"=character())
+for(i in 1:length(decade)){
+  df <- filter(new_df,decade == decade[i]) %>% 
+    rep_sample_n(size=n,reps=reps,replace=FALSE) %>% 
+    group_by(replicate) %>%
+    summarize(mean=mean(runtimeMinutes,na.rm=TRUE),
+              sd=sd(runtimeMinutes,na.rm=TRUE)) %>%
+    mutate("decade"=rep(decade[i],1000))
+  samp_distr_bydec <- bind_rows(samp_distr_bydec,df)
+}
+
+# calculate mean and sd of sampling distribution of sample means for each decade
+summary_sampdistr <- samp_distr_bydec %>% 
+  group_by(decade) %>% 
+  summarize(mean=mean(mean),
+            sd=sd(sd))
+# plot sampling distribution for each decade
+# mean
+ggplot(data=samp_distr_bydec, aes(x=mean)) +
+  geom_histogram() + facet_grid(~decade)
+ggplot(data=samp_distr_bydec, aes(x=sd)) +
+  geom_histogram() + facet_grid(~decade)
+```
+These plots are shaped like an normal curve.
+
+Last part of challenge 1: compare the SE in runtimeMinutes for samples (size = 100) from each decade as estimated from your first sample of 100 movies (1), from the known population SD for each decade (2), and from sampling distribution of sample means for each decade (3) 
+NTS: standard error = sd / square root of sample size
+```{r}
+# SE in runtime minutes as estimated from first sample of 100 movies - calculated above
+stderror_singlesample
+# SE in runtime minutes as etimated from known pop SD for each decade - calculated above
+stderror_population
+# SE in runtime minutes as estimated from sampling distribution of sample means for each decade
+(stderror_sampdistr <- summary_sampdistr$sd / sqrt(1000))
+```
+standard error is really tiny calculated from the sampling distribution. Standard error for single sample and population are similar where the sample sizes were about equal but much smaller in the population data when sample sizes were much larger in the complete dataset.
+
+Challenge 2:
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(cowplot)
+f <- "https://raw.githubusercontent.com/difiore/ada-2022-datasets/main/zombies.csv"
+z <- read_csv(f, col_names = TRUE)
+# make function to calculate the population standard deviation
+popSD <- function(x){sqrt(sum((x-mean(x))^2)/(length(x)))}
+pop_mean_sd <- z %>% summarize(mean_height = mean(height,na.rm=TRUE),
+                               sd_height = popSD(height),
+                               mean_weight = mean(weight,na.rm=TRUE),
+                               sd_weight = popSD(weight),
+                               mean_age = mean(age,na.rm=TRUE),
+                               sd_age = popSD(age),
+                               mean_zombieskilled = mean(zombies_killed,na.rm=TRUE),
+                               sd_zombieskilled = popSD(zombies_killed),
+                               mean_years_ed = mean(years_of_education,na.rm=TRUE),
+                               sd_years_ed = popSD(years_of_education))
+# plot each variable by gender
+p1 <- ggplot(z,aes(x=gender,y=height)) + geom_boxplot(na.rm=TRUE) + ylab("Height")
+p2 <- ggplot(z,aes(x=gender,y=weight)) + geom_boxplot(na.rm=TRUE) + ylab("Weight")
+p3 <- ggplot(z,aes(x=gender,y=age)) + geom_boxplot(na.rm=TRUE) + ylab("Age")
+p4 <- ggplot(z,aes(x=gender,y=zombies_killed)) + geom_boxplot(na.rm=TRUE) + ylab("Number of Zombies Killed")
+p5 <- ggplot(z,aes(x=gender,y=years_of_education)) + geom_boxplot(na.rm=TRUE) + ylab("Years of Education")
+plot_grid(
+  p1,
+  p2,
+  p3,
+  p4,
+  p5
+)
+# scatterplots of height and weight in relation to age (x var) with different colored points for gender
+pl1 <- ggplot(z,aes(x=age,y=height,color=gender)) + geom_point()
+pl2 <- ggplot(z,aes(x=age,y=weight,color=gender)) +geom_point()
+plot_grid(
+  pl1,
+  pl2
+)
+```
+Age and height are strongly positively correlated in both men and women (as expected). Women in general are shorter than men at all ages. Age and weight is also positively correlated but it seems to be not as strong as the correlation between age and height. Again, men in general weigh more than women at all ages.
+
+Do each of the quantitative variables seem drawn from a normal distribution? If not, what do they seem drawn from?
+```{r}
+library(mosaic)
+# quantitative variables = height, weight, zombies_killed, years_of_education
+# STILL NEED TO MAKE QQ PLOTS
+histogram(z$height)
+plotDist("norm",mean = mean(z$height),sd = sd(z$height),add=TRUE) # yes height seems normally distributed
+histogram(z$weight)
+plotDist("norm",mean = mean(z$weight),sd = sd(z$weight),add=TRUE) # yes weight seems normally distributed
+histogram(z$zombies_killed)
+plotDist("norm",mean = mean(z$zombies_killed),sd = sd(z$zombies_killed),add=TRUE) # zombies killed seems normally distributed
+histogram(z$years_of_education)
+plotDist("norm",mean = mean(z$years_of_education),sd = sd(z$years_of_education),add=TRUE) # years in ed does not seem normally distributed
+# perhaps a poisson distribution (this is discrete var) or binomial?
+```
+
+Sample subset of zombie survivors (once, 50 individuals, no replacement) and calculate mean and sd for each var. Then estimate the standard error and construct the theoretical 95% confidence interval for each mean. Use standard normal or student's t distribution to derive critical values needed to calculate lower and upper CI.
+```{r}
+# calculate mean and sd of single sample of 50
+sample_z <- z %>% sample_n(size=50,replace=FALSE) %>% 
+  summarize(mean_height = mean(height,na.rm=TRUE),
+            sd_height = sd(height,na.rm=TRUE),
+            mean_weight = mean(weight,na.rm=TRUE),
+            sd_weight = sd(weight,na.rm=TRUE),
+            mean_zombies_killed = mean(zombies_killed,na.rm=TRUE),
+            sd_zombies_killed = sd(zombies_killed,na.rm=TRUE),
+            mean_yearsed = mean(years_of_education,na.rm=TRUE),
+            sd_yearsed = sd(years_of_education,na.rm=TRUE))
+# calculate standard error
+stderror_sample_z <- sample_z %>% summarize(SE_height = sd_height/(sqrt(50)),
+                                            SE_weight = sd_weight/(sqrt(50)),
+                                            SE_zombies_killed = sd_zombies_killed/(sqrt(50)),
+                                            SE_years_ed = sd_yearsed/(sqrt(50)))
+# construct 95% confidence interval for each mean
+
+# draw 199 random samples of 50 survivors and calculate mean for each of these samples
+library(infer)
+reps <- 199
+n <- 50
+multi_sample_z <- rep_sample_n(z,size=n,reps=reps,replace=FALSE) %>%
+  group_by(replicate) %>%
+  summarize(mean_height=mean(height,na.rm=TRUE),
+            mean_weight = mean(weight,na.rm=TRUE),
+            mean_zombies_killed = mean(zombies_killed,na.rm=TRUE),
+            mean_yearsed = mean(years_of_education,na.rm=TRUE))
+# add the single sampling we did before to the multiple sampling above in a new dataframe so can do stuff
+replicate <- 200
+mean_single_sample <- bind_cols("replicate"=replicate,select(sample_z,mean_height,mean_weight,mean_zombies_killed,mean_yearsed))
+z_sampled200 <- bind_rows(multi_sample_z,mean_single_sample)
+
+# means and standard deviations of the sampling distributions for each variable
+(sampling_distr_means_sds <- z_sampled200 %>% summarize(sampdistr_mean_height = mean(mean_height),
+                                                       samp_distr_sd_height = sd(mean_height),
+                                                       sampdistr_mean_weight = mean(mean_weight),
+                                                       sampdistr_sd_weight = sd(mean_weight),
+                                                       sampdistr_mean_zombies = mean(mean_zombies_killed),
+                                                       sampdistr_sd_zombies = sd(mean_zombies_killed),
+                                                       sampdistr_yearsed = mean(mean_yearsed),
+                                                       sampdistr_yearsed = sd(mean_yearsed)))
+
+# generating confidence interval for each mean directly from the sampling distribution using the central 95% of that distribution - lower bound - 2.5, upper bound - 97.5
+```
+
+How do the standard deviations of the sampling distribution for each variable compare to the standard errors estimated from your first sample of size 50? What do sampling distributions for each variable mean look like? Are they normally distributed? What about for those variables that you concluded were not originally drawn from a normal distribution? How do the two 95% CIs you estimated compare to one another (i.e., the CI based on one sample and the corresponding sample standard deviation versus the CI based on simulation where you created a sampling distribution across 200 samples)?
